@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { google } from 'googleapis';
-import { processEmails } from '../../lib/gemini';
+import { tagEmail } from '../../lib/gemini';
 import nodemailer from 'nodemailer';
 import { getToken } from "next-auth/jwt"
 
@@ -51,30 +51,23 @@ export default async function handler(
       return res.status(200).json({ message: 'No unread emails to process.' });
     }
 
-    const processedData = await processEmails(emails);
+    const taggedEmails = await Promise.all(
+      emails.map((email) => tagEmail(email))
+    );
 
     const htmlBody = `
       <h1>Your Daily Email Digest</h1>
       <p>Here's a summary of your unread emails:</p>
-      <h2>Summary</h2>
-      <p>${processedData.summary}</p>
       
-      <h2>Categorized Emails</h2>
-      ${Object.entries(processedData.categorizedEmails).map(([category, emailIds]) => `
-        <h3>${category}</h3>
-        <ul>
-          ${(emailIds as string[]).map(id => `<li>${id}</li>`).join('')}
-        </ul>
-      `).join('')}
-
-      <h2>Unsubscribe Suggestions</h2>
+      <h2>Tagged Emails</h2>
       <ul>
-        ${processedData.unsubscribeSuggestions.map((s: any) => `<li>${s.emailId}: ${s.reason}</li>`).join('')}
-      </ul>
-
-      <h2>Reply Suggestions</h2>
-      <ul>
-        ${processedData.replySuggestions.map((s: any) => `<li>${s.emailId}: ${s.suggestedReply}</li>`).join('')}
+        ${taggedEmails.map((email: any) => `
+          <li>
+            <strong>Email ID:</strong> ${email.emailId}<br/>
+            <strong>Tag:</strong> ${email.tag}<br/>
+            <strong>Importance:</strong> ${email.importance}
+          </li>
+        `).join('')}
       </ul>
     `;
 
