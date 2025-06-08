@@ -3,6 +3,10 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { getToken } from 'next-auth/jwt';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
 
   if (!token || !token.accessToken) {
@@ -14,27 +18,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const gmail = google.gmail({ version: 'v1', auth });
 
+  const { ids } = req.body;
+
+  if (!ids || !Array.isArray(ids)) {
+    return res.status(400).json({ error: 'Invalid request body' });
+  }
+
   try {
-    const response = await gmail.users.messages.list({
+    await gmail.users.messages.batchModify({
       userId: 'me',
-      maxResults: 50, // Or however many you want to fetch
-      q: 'is:unread',
+      requestBody: {
+        ids: ids,
+        removeLabelIds: ['UNREAD', 'INBOX'],
+      },
     });
 
-    const messages = response.data.messages || [];
-    const emails = await Promise.all(
-      messages.map(async (message) => {
-        const msg = await gmail.users.messages.get({
-          userId: 'me',
-          id: message.id!,
-        });
-        return msg.data;
-      })
-    );
-
-    res.status(200).json(emails);
+    res.status(200).json({ message: 'Emails cleaned successfully' });
   } catch (error) {
     console.error('The API returned an error: ' + error);
-    res.status(500).json({ error: 'Failed to fetch emails' });
+    res.status(500).json({ error: 'Failed to clean emails' });
   }
 }
